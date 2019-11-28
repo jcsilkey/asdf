@@ -17,3 +17,5 @@ fpath=(
     "${ASDF_DIR}/completions"
     $fpath
 )
+
+source "${ASDF_DIR}/lib/asdf.sh"
