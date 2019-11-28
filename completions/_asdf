@@ -1,0 +1,223 @@
+#compdef asdf
+
+__asdf_commands() {
+  local -a commands
+  commands=(
+    'plugin-add:Add a plugin from the plugin repo or add a git repo as a plugin'
+    'plugin-list:List linstalled plugins'
+    'plugin-list-all:List plugins registered on asdf-plugins repository'
+    'plugin-remove:Remove plugin and package versions'
+    'plugin-update:Update plugins'
+    'install:Install specific version of a package or all package versions in the .tool-versions file'
+    'uninstall:Remove a specific version of a package'
+    'current:Display current version set or being used for packages'
+    'where:Display install path for an installed or current version'
+    'which:Display the path to an executable'
+    'shell:Set the package version in the current shell'
+    'local:Set the package local version'
+    'global:Set the package global version'
+    'list:List installed versions of a package'
+    'list-all:List all versions of a package'
+    'exec:Executes the command shim for current version'
+    'env:Prints or runs an executable under a command environment'
+    'reshim:Recreate shims for version of a package'
+    'shim-versions:List on which plugins and versions is command available'
+    'update:Update asdf'
+  )
+  _describe -t asdf-commands 'commands' commands
+}
+
+__asdf_completion_caching_policy() {
+  local -a policy
+    policy=( "$1"(Nm+7) )
+    (( $#policy ))
+}
+
+__asdf_plugins() {
+  local -A plugins
+  local -a available_plugins
+  local comp_cachename=asdf_available_plugins
+
+  if _cache_invalid $comp_cachename || ! _retrieve_cache $comp_cachename; then
+    plugins=($(asdf plugin-list-all 2> /dev/null))
+
+    for key val in ${(kv)plugins}; do
+      available_plugins+=($key)
+    done
+
+    _store_cache $comp_cachename available_plugins
+  fi
+
+  _describe -t plugins 'available plugins' available_plugins
+}
+
+__asdf_installed_plugins() {
+  local -a plugins
+  plugins=($(asdf plugin-list 2> /dev/null))
+  _describe -t installed-plugins 'installed plugins' plugins
+}
+
+__asdf_package_versions() {
+  local -a versions
+  local -a package
+  package="${line[1]}"
+
+  local comp_cachename="asdf_package_${package}_versions"
+
+  if _cache_invalid $comp_cachename || ! _retrieve_cache $comp_cachename; then
+    versions=($(asdf list-all $package 2> /dev/null))
+    _store_cache $comp_cachename versions
+  fi
+
+  _describe -V -t package-versions 'available package versions' versions
+}
+
+__asdf_installed_package_versions() {
+  local -a versions
+  local -a package
+  package="${line[1]}"
+  versions=($(asdf list $package 2> /dev/null))
+  _describe -V -t installed-package-versions 'installed package versions' versions
+}
+
+__asdf_available_package_versions() {
+  _alternative \
+    'args:arg:( system )' \
+    'installed-plugins:plugin:__asdf_installed_package_versions'
+}
+
+##### PLUGIN COMMANDS #####
+# asdf plugin-add <name> [<git-url]
+_asdf_plugin_add() {
+  _arguments \
+    ': :__asdf_plugins'
+}
+
+# asdf plugin-list [--url]
+_asdf_plugin_list() {
+  _arguments \
+    '--urls[List installed plugins with repository URLs]'
+}
+
+# asdf plugin-remove <name>
+_asdf_plugin_remove() {
+  _arguments \
+    ': :__asdf_installed_plugins'
+}
+
+# asdf plugin-update <name|--all>
+_asdf_plugin_update() {
+  _alternative \
+    'args:arg:( --all )' \
+    'installed-plugins:plugin:__asdf_installed_plugins'
+}
+
+##### PACKAGE COMMANDS #####
+
+# asdf install [<name> <version>]
+_asdf_install() {
+  _arguments \
+    ': :__asdf_installed_plugins' \
+    ': :__asdf_package_versions'
+}
+
+# asdf uninstall <name> <version>
+_asdf_uninstall() {
+  _arguments \
+    ': :__asdf_installed_plugins' \
+    ': :__asdf_installed_package_versions'
+}
+
+# asdf where <name> [<version>]
+_asdf_where() {
+  _arguments \
+    ': :__asdf_installed_plugins' \
+    ': :__asdf_installed_package_versions'
+}
+
+# @TODO asdf which <command>
+
+# asdf shell <name> <version>
+_asdf_shell() {
+  _arguments \
+    ': :__asdf_installed_plugins' \
+    ': :__asdf_available_package_versions'
+}
+
+# asdf local <name> <version>
+_asdf_local() {
+  _asdf_shell
+}
+
+# asdf global <name> <version>
+_asdf_global() {
+  _asdf_shell
+}
+
+# asdf current [<name>]
+_asdf_current() {
+  _arguments \
+    ': :__asdf_installed_plugins'
+}
+
+# asdf list <name>>
+_asdf_list() {
+  _arguments \
+    ': :__asdf_installed_plugins'
+}
+
+_asdf_list_all() {
+  _asdf_list
+}
+
+##### UTIL COMMANDS #####
+# @TODO asdf exec <command> [args...]
+# @TODO asdf env <command> [executable]
+
+# asdf reshim <name> <version>
+_asdf_reshim() {
+  _arguments \
+    ': :__asdf_installed_plugins' \
+    ': :__asdf_available_package_versions'
+}
+
+# @TODO asdf shim-versions <command>
+
+# asdf update [--head]
+_asdf_update() {
+  _arguments \
+    '--head[Update asdf to the latest on the master branch]'
+}
+
+_asdf() {
+  local curcontext="$curcontext" state state_descr line expl
+  local tmp ret=1
+
+  _arguments -C : \
+    '1:command:->command' \
+    '*::options:->options' && return 0
+
+  case $state in
+    command)
+      # set default cache policy
+      zstyle -s ":completion:${curcontext%:*}:*" cache-policy tmp
+
+      [[ -n $tmp ]] || zstyle ":completion:${curcontext%:*}:*" cache-policy \
+        __asdf_completion_caching_policy
+
+      __asdf_commands && return 0
+      ;;
+    options)
+      local command
+      command="${line[1]}"
+
+      curcontext="${curcontext%:*}-${command}:${curcontext##*:}"
+
+      zstyle ":completion:${curcontext%:*}:*" cache-policy \
+        __asdf_completion_caching_policy
+
+      local completion_func="_asdf_${command//-/_}"
+      _call_function ret "${completion_func}" && return ret
+    ;;
+  esac
+}
